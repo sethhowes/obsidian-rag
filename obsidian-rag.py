@@ -35,6 +35,7 @@ embedding_client = (
 
 
 def split_docs(docs):
+    """Split documents into chunks for indexing."""
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000, chunk_overlap=200, add_start_index=True
     )
@@ -43,37 +44,26 @@ def split_docs(docs):
 
 if args.command == "sync":
     loader = ObsidianLoader(obsidian_dir, collect_metadata=False)
-    docs = loader.load()
-    all_splits = split_docs(docs)[:500]
+    obsidian_docs = loader.load()
+    all_splits = split_docs(obsidian_docs)
     vectorstore = Chroma(
         embedding_function=embedding_client,
         persist_directory=obsidian_db_path,
     )
     print("Syncing your Obsidian database...")
-
-    embedding = OpenAIEmbeddings()
-
-    # Setup the record manager for recording which documents have been indexed
-    namespace = f"chroma/{collection_name}
-    record_manager_path = os.path.join(
-        os.path.expanduser("~"), ".obsidian-rag", "record_manager_cache.sql"
-    )
+    namespace = f"chroma/{collection_name}"
     record_manager = SQLRecordManager(
-        namespace, db_url=f"sqlite:///{record_manager_path}"
+        namespace, db_url=f"sqlite:///{os.path.join(obsidian_db_path, 'record_manager_cache.sql')}"
     )
-
-    # Create the schema if it doesn't exist
-    if not os.path.exists(record_manager_path):
-        record_manager.create_schema()
-
-    # Index the documents
+    record_manager.create_schema()
     result = index(
         all_splits,
         record_manager,
         vectorstore,
-        cleanup="incremental",
-        source_id_key="source",
+        cleanup="full",
+        source_id_key="source"
     )
+
     print(result)
     print("Database synced!")
 
